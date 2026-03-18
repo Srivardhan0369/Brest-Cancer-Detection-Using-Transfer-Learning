@@ -31,7 +31,6 @@ SEED = 42
 BASE_DIR = Path(__file__).parent
 SAVE_DIR = BASE_DIR / "saved_model"
 SAVE_DIR.mkdir(exist_ok=True)
-MODEL_PATH = str(SAVE_DIR / "breast_cancer_model.keras")
 DATASET_PATH = BASE_DIR / "dataset"
 REPORT_PATH = SAVE_DIR / "metrics_report.json"
 CM_PATH = SAVE_DIR / "confusion_matrix.png"
@@ -39,6 +38,14 @@ CM_PATH = SAVE_DIR / "confusion_matrix.png"
 tf.random.set_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
+
+
+def _model_save_path(backbone_name: str) -> str:
+    """Return the save path for a given backbone, matching model.py load paths."""
+    if not backbone_name.startswith("EfficientNet"):
+        raise ValueError(f"Unsupported backbone '{backbone_name}' for model path derivation.")
+    tag = backbone_name.replace("EfficientNet", "")  # "B0", "B3", "B7"
+    return str(SAVE_DIR / f"model_{tag}.keras")
 
 
 class BinaryFocalLoss(tf.keras.losses.Loss):
@@ -258,11 +265,11 @@ def compile_model(model, learning_rate: float, use_focal: bool):
     )
 
 
-def build_callbacks(phase_name: str, patience: int):
+def build_callbacks(phase_name: str, patience: int, model_path: str):
     return [
         callbacks.EarlyStopping(monitor="val_auc", patience=patience, restore_best_weights=True, mode="max"),
         callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.3, patience=max(2, patience // 2), min_lr=1e-7),
-        callbacks.ModelCheckpoint(MODEL_PATH, monitor="val_auc", save_best_only=True, mode="max"),
+        callbacks.ModelCheckpoint(model_path, monitor="val_auc", save_best_only=True, mode="max"),
         callbacks.TensorBoard(log_dir=str(BASE_DIR / f"logs/{phase_name}")),
         callbacks.CSVLogger(str(BASE_DIR / f"logs/{phase_name}_history.csv")),
     ]
@@ -332,8 +339,10 @@ def evaluate_test_set(model, test_ds, threshold: float):
 def train(args):
     configure_runtime()
     logger.info("=" * 68)
-    logger.info("Breast Cancer Detection - EfficientNetB7 High-Accuracy Training")
+    logger.info("Breast Cancer Detection - %s High-Accuracy Training", args.backbone)
     logger.info("=" * 68)
+
+    model_path = _model_save_path(args.backbone)
 
     dataset_root = download_dataset(Path(args.dataset) if args.dataset else None)
     benign_paths, malignant_paths = collect_image_paths(dataset_root)
@@ -388,11 +397,11 @@ def train(args):
         validation_data=val_ds,
         epochs=args.epochs_head,
         class_weight=class_weights,
-        callbacks=build_callbacks("phase1_head", patience=4),
+        callbacks=build_callbacks("phase1_head", patience=4, model_path=model_path),
     )
 
     model = build_model(backbone_name=args.backbone, unfreeze_top_n=args.unfreeze_phase2, dropout_rate=0.35)
-    model.load_weights(MODEL_PATH)
+    model.load_weights(model_path)
     compile_model(model, learning_rate=2e-4, use_focal=True)
     logger.info("Phase 2/3: Fine-tune top %s layers with focal loss", args.unfreeze_phase2)
     model.fit(
@@ -400,11 +409,11 @@ def train(args):
         validation_data=val_ds,
         epochs=args.epochs_finetune_1,
         class_weight=class_weights,
-        callbacks=build_callbacks("phase2_finetune60", patience=5),
+        callbacks=build_callbacks("phase2_finetune60", patience=5, model_path=model_path),
     )
 
     model = build_model(backbone_name=args.backbone, unfreeze_top_n=args.unfreeze_phase3, dropout_rate=0.30)
-    model.load_weights(MODEL_PATH)
+    model.load_weights(model_path)
     compile_model(model, learning_rate=7e-5, use_focal=True)
     logger.info("Phase 3/3: Deep fine-tune top %s layers", args.unfreeze_phase3)
     model.fit(
@@ -412,10 +421,10 @@ def train(args):
         validation_data=val_ds,
         epochs=args.epochs_finetune_2,
         class_weight=class_weights,
-        callbacks=build_callbacks("phase3_finetune140", patience=6),
+        callbacks=build_callbacks("phase3_finetune140", patience=6, model_path=model_path),
     )
 
-    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    model = tf.keras.models.load_model(model_path, compile=False)
     compile_model(model, learning_rate=1e-5, use_focal=False)
     eval_values = model.evaluate(test_ds, verbose=1)
     for metric_name, metric_value in zip(model.metrics_names, eval_values):
@@ -426,7 +435,7 @@ def train(args):
 
     logger.info("Best-threshold test F1: %.4f", summary["f1"])
     logger.info("Best-threshold test accuracy: %.4f", summary["accuracy"])
-    logger.info("Model saved to: %s", MODEL_PATH)
+    logger.info("Model saved to: %s", model_path)
 
 
 def parse_args():

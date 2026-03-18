@@ -17,9 +17,9 @@ else
   exit 1
 fi
 
-# Check if model exists
-MODEL="$PROJECT_DIR/backend/saved_model/breast_cancer_model.keras"
-if [ ! -f "$MODEL" ]; then
+# Check if any trained model exists
+MODEL_DIR="$PROJECT_DIR/backend/saved_model"
+if [ ! -f "$MODEL_DIR/model_B0.keras" ] && [ ! -f "$MODEL_DIR/model_B3.keras" ] && [ ! -f "$MODEL_DIR/model_B7.keras" ]; then
   echo ""
   echo "⚠️  No trained model found!"
   echo "   Run training first: cd backend && python train.py"

@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     """Load model on startup."""
     logger.info("🚀 Starting Breast Cancer Detection API...")
     m = breast_model.load_model()
-    if m is not None:
+    if m:
         logger.info("✅ Model loaded and ready.")
     else:
         logger.warning("⚠️  Model not found — run train.py first.")
@@ -72,7 +72,7 @@ async def health_check():
     m = breast_model.load_model()
     return {
         "status": "healthy",
-        "model_loaded": m is not None,
+        "model_loaded": bool(m),
         "api_version": "1.0.0",
     }
 

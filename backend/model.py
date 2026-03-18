@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 # Image size for EfficientNetB7
 IMG_SIZE = (224, 224)
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "saved_model", "breast_cancer_model.keras")
 DEFAULT_THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.5"))
 
 _models = {}

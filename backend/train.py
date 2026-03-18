@@ -42,6 +42,8 @@ random.seed(SEED)
 
 def _model_save_path(backbone_name: str) -> str:
     """Return the save path for a given backbone, matching model.py load paths."""
+    if not backbone_name.startswith("EfficientNet"):
+        raise ValueError(f"Unsupported backbone '{backbone_name}' for model path derivation.")
     tag = backbone_name.replace("EfficientNet", "")  # "B0", "B3", "B7"
     return str(SAVE_DIR / f"model_{tag}.keras")
 
